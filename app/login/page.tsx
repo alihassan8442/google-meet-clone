@@ -2,7 +2,7 @@
 
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 
 export default function LoginPage() {
   const { data: session, status } = useSession();
@@ -10,37 +10,38 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // ✅ error state
   const [error, setError] = useState("");
 
   // 🚀 Redirect logged-in user
   useEffect(() => {
-    if (session) {
+    if (status === "authenticated" && session) {
       router.push("/meet");
     }
-  }, [session, router]);
+  }, [session, status, router]);
 
-  if (status === "loading") {
+  // 🔥 FIX: Hide the UI instantly when authenticated to prevent the temporary logout button flash
+  if (status === "loading" || status === "authenticated") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-gray-600 font-medium animate-pulse">
+          Redirecting to meet...
+        </div>
       </div>
     );
   }
 
-  // ✅ validators
-  const isValidEmail = (email) => {
+  // ✅ Validators
+  const isValidEmail = (email: string): boolean => {
     return /\S+@\S+\.\S+/.test(email);
   };
 
-  const isValidPassword = (password) => {
-    // at least 1 uppercase + 1 number
+  const isValidPassword = (password: string): boolean => {
+    // At least 1 uppercase + 1 number
     return /(?=.*[A-Z])(?=.*\d)/.test(password);
   };
 
-  // 🔐 Email login
-  const handleEmailLogin = (e) => {
+  // 🔐 Email login handler
+  const handleEmailLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -55,28 +56,36 @@ export default function LoginPage() {
     }
 
     if (!isValidPassword(password)) {
-      setError(
-        "Password must contain 1 uppercase letter and 1 number"
-      );
+      setError("Password must contain 1 uppercase letter and 1 number");
       return;
     }
 
-    // ✅ success → go to meet
-    router.push("/meet");
+    try {
+      // 🔌 Authenticate with NextAuth credentials provider
+      const result = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
+      } else if (result?.ok) {
+        // ✅ SUCCESS: Send user to meet page immediately and clear Next.js caches
+        router.push("/meet");
+        router.refresh();
+      }
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+    }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md text-center">
+        <h2 className="text-xl font-semibold mb-2">Google Meet</h2>
 
-        <h2 className="text-xl font-semibold mb-2">
-          Google Meet
-        </h2>
-
-        <p className="text-gray-500 mb-6">
-          Sign in to continue
-        </p>
+        <p className="text-gray-500 mb-6">Sign in to continue</p>
 
         {/* ❌ ERROR MESSAGE */}
         {error && (
@@ -86,36 +95,37 @@ export default function LoginPage() {
         )}
 
         {/* ================= EMAIL LOGIN ================= */}
-        <form onSubmit={handleEmailLogin} className="space-y-3 mb-6">
+        {!session && (
+          <form onSubmit={handleEmailLogin} className="space-y-3 mb-6">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border px-3 py-2 rounded-md outline-none focus:ring-2 focus:ring-blue-400"
+            />
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full border px-3 py-2 rounded-md outline-none focus:ring-2 focus:ring-blue-400"
-          />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border px-3 py-2 rounded-md outline-none focus:ring-2 focus:ring-blue-400"
+            />
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border px-3 py-2 rounded-md outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded-md w-full hover:bg-green-700"
-          >
-            Login with Email
-          </button>
-
-        </form>
+            <button
+              type="submit"
+              className="bg-green-600 text-white px-4 py-2 rounded-md w-full hover:bg-green-700"
+            >
+              Login with Email
+            </button>
+          </form>
+        )}
 
         {/* ================= GOOGLE LOGIN ================= */}
         {!session && (
           <button
+            type="button"
             onClick={() =>
               signIn("google", {
                 callbackUrl: "/meet",
@@ -129,12 +139,14 @@ export default function LoginPage() {
         )}
 
         {/* ================= SIGNUP ================= */}
-        <p className="text-sm text-gray-500 mt-6">
-          Don’t have an account?{" "}
-          <a href="/signup" className="text-blue-600 hover:underline">
-            Sign up
-          </a>
-        </p>
+        {!session && (
+          <p className="text-sm text-gray-500 mt-6">
+            Don’t have an account?{" "}
+            <a href="/signup" className="text-blue-600 hover:underline">
+              Sign up
+            </a>
+          </p>
+        )}
 
         {/* ================= LOGOUT ================= */}
         {session && (
@@ -144,14 +156,14 @@ export default function LoginPage() {
             </p>
 
             <button
+              type="button"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="bg-red-500 text-white px-4 py-2 rounded-md w-full"
+              className="bg-red-500 text-white px-4 py-2 rounded-md w-full hover:bg-red-600"
             >
               Sign out
             </button>
           </div>
         )}
-
       </div>
     </div>
   );
