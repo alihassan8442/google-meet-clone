@@ -19,7 +19,6 @@ export default function LoginPage() {
     }
   }, [session, status, router]);
 
-  // 🔥 FIX: Hide the UI instantly when authenticated to prevent the temporary logout button flash
   if (status === "loading" || status === "authenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -36,7 +35,6 @@ export default function LoginPage() {
   };
 
   const isValidPassword = (password: string): boolean => {
-    // At least 1 uppercase + 1 number
     return /(?=.*[A-Z])(?=.*\d)/.test(password);
   };
 
@@ -61,7 +59,6 @@ export default function LoginPage() {
     }
 
     try {
-      // 🔌 Authenticate with NextAuth credentials provider
       const result = await signIn("credentials", {
         redirect: false,
         email,
@@ -71,7 +68,6 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else if (result?.ok) {
-        // ✅ SUCCESS: Send user to meet page immediately and clear Next.js caches
         router.push("/meet");
         router.refresh();
       }
@@ -152,7 +148,8 @@ export default function LoginPage() {
         {session && (
           <div className="mt-4">
             <p className="text-gray-600 mb-3">
-              Signed in as {session.user?.email}
+              {/* 🔥 TypeScript fix applied here */}
+              Signed in as {(session as any).user?.email}
             </p>
 
             <button
